@@ -1639,9 +1639,34 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"❌ {e}")
         context.user_data['state'] = None
 
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+# Clase para responder a Render y que no tumbe el servicio
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is running smoothly!")
+    def log_message(self, format, *args):
+        return # Silenciar logs del servidor web para no llenar la consola
+
+def run_health_check():
+    # Render asigna automáticamente un puerto en la variable de entorno PORT
+    port = int(os.getenv("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    print(f"🌍 Servidor de salud activo en el puerto {port}")
+    server.serve_forever()
+
 def main():
     if not BOT_TOKEN: print("❌ Set BOT_TOKEN in .env"); return
     db_init()
+    
+    # Arrancamos el servidor web en segundo plano para engañar a Render
+    web_thread = threading.Thread(target=run_health_check, daemon=True)
+    web_thread.start()
+    
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start",   cmd_start))
     app.add_handler(CommandHandler("stats",   cmd_stats))
